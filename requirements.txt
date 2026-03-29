@@ -1,0 +1,6 @@
+livekit
+livekit-agents
+livekit-plugins-google
+livekit-plugins-turn-detector
+python-dotenv
+
