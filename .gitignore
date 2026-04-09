@@ -26,6 +26,7 @@ wheels/
 # Environment
 .env
 .env.local
+service_account.json
 
 # IDE
 .vscode/
