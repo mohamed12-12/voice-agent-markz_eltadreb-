@@ -1,58 +1,85 @@
-# Gemini LiveKit Voice Agent
+# Voice Agent - Local Run Guide
 
-A lightweight, high-performance voice agent powered by Google's Gemini Realtime API and LiveKit. This agent is designed for natural, low-latency Arabic voice interactions.
+This project is a LiveKit + Gemini realtime voice agent for Arabic lead capture and Google Sheets logging.
 
-## Features
-- **Native Audio**: Uses `gemini-2.5-flash-native-audio-preview` for end-to-end voice processing.
-- **Multilingual Support**: Optimized for Arabic conversations.
-- **Low Latency**: Built on LiveKit Agents framework for seamless WebRTC communication.
-- **Pure Voice**: No database or complex logging overhead—just a focused voice interaction layer.
+## What Runs Locally
+
+- `main.py`: the LiveKit worker that joins a room and runs the voice agent
+- `server.py`: a small Flask app that serves the browser demo and creates LiveKit tokens
+- `tools.py`: knowledge lookup, lead saving, and human transfer tools
 
 ## Prerequisites
-- Python 3.10 or higher.
-- A LiveKit Cloud project or a self-hosted LiveKit server.
-- A Google Gemini API Key with access to the Realtime/Preview models.
 
-## Setup
+- Python 3.11 to 3.13 recommended
+- A LiveKit server or LiveKit Cloud project
+- A Google AI Studio API key for Gemini realtime
+- A Google service account JSON file with access to your target sheet
 
-1. **Clone the repository**:
-   ```bash
-   git clone <repository-url>
-   cd Gemini-LiveKit
-   ```
+## Environment Setup
 
-2. **Install dependencies**:
-   ```bash
-   pip install -r requirements.txt
-   ```
+1. Create a virtual environment:
 
-3. **Configure environment variables**:
-   Copy `.env.example` to `.env` and fill in your credentials:
-   ```bash
-   cp .env.example .env
-   ```
-   Required variables:
-   - `GOOGLE_API_KEY`: Your Gemini API key.
-   - `LIVEKIT_URL`: Your LiveKit server URL (e.g., `wss://your-project.livekit.cloud`).
-   - `LIVEKIT_API_KEY`: Your LiveKit API key.
-   - `LIVEKIT_API_SECRET`: Your LiveKit API secret.
+```powershell
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1
+```
 
-## Running the Agent
+2. Install dependencies:
 
-### Development Mode
-To run the agent with local testing/sandbox:
-```bash
+```powershell
+pip install -r requirements.txt
+```
+
+3. Copy the sample environment file:
+
+```powershell
+Copy-Item .env.example .env
+```
+
+4. Fill in `.env` with real values:
+
+- `GOOGLE_API_KEY`
+- `GEMINI_MODEL`
+- `LIVEKIT_URL`
+- `LIVEKIT_API_KEY`
+- `LIVEKIT_API_SECRET`
+- `SPREADSHEET_ID`
+- `SHEET_NAME`
+- `GOOGLE_APPLICATION_CREDENTIALS`
+
+5. Put your Google service account file in the project root or point `GOOGLE_APPLICATION_CREDENTIALS` to its full path.
+
+## Run Locally
+
+Open two terminals in this folder with the virtual environment activated.
+
+Terminal 1:
+
+```powershell
 python main.py dev
 ```
 
-### Console Mode
-To test the agent directly in your terminal (using your system's default microphone and speakers):
-```bash
-python main.py console
+Terminal 2:
+
+```powershell
+python server.py
 ```
 
-## Prompt Configuration
-You can customize the agent's personality and instructions in `prompt.py`. The current configuration is optimized for Arabic voice interaction.
+Then open:
 
-## License
-MIT
+- `http://localhost:5000`
+
+The page will request a token from the Flask server, connect to your LiveKit room, and the worker in `main.py` will join the same room as the agent.
+
+## Quick Checks
+
+- If the worker fails immediately, confirm your LiveKit and Google API keys in `.env`
+- If you see a Gemini policy/model mismatch, set `GEMINI_MODEL=gemini-2.5-flash-native-audio-preview-12-2025`
+- If Sheets writes fail, confirm the sheet is shared with the service account email
+- If the browser connects but no voice is heard, make sure the worker is running and the room name matches
+
+## Notes
+
+- The worker code is written for `livekit-agents 1.5.x`
+- `main.py` now uses `AgentSession`, which matches the installed LiveKit SDK
+- `server.py` needs `flask`, which is included in `requirements.txt`

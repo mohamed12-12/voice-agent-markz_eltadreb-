@@ -4,6 +4,7 @@ __pycache__/
 *$py.class
 *.so
 .Python
+.venv/
 env/
 venv/
 ENV/
@@ -26,7 +27,27 @@ wheels/
 # Environment
 .env
 .env.local
+.env.*
+!.env.example
+
+# Secrets
 service_account.json
+*.pem
+*.key
+
+# Runtime artifacts
+leads_backup.csv
+*.log
+logs/
+tmp/
+temp/
+
+# Test and tooling caches
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
 
 # IDE
 .vscode/

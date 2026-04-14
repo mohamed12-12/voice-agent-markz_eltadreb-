@@ -1,35 +1,21 @@
-import os
 import asyncio
 import warnings
-import datetime
-import platform
-from typing import Annotated
 from dotenv import load_dotenv
-
-# --- CRITICAL FIX: Windows WMI Timeout Monkeypatch ---
-# This prevents the "TimeoutError: [WinError 258]" when aiohttp/platform tries to query WMI on Windows.
-if platform.system() == "Windows":
-    _original_uname = platform.uname
-    def _mock_uname():
-        # Return a mock uname_result to avoid triggering WMI
-        from collections import namedtuple
-        UnameResult = namedtuple("uname_result", "system node release version machine processor")
-        # Use environment variables for the node name to avoid recursion with platform.node()
-        node_name = os.environ.get("COMPUTERNAME", "Windows-Host")
-        return UnameResult("Windows", node_name, "10", "10.0.0", "AMD64", "Intel64 Family 6 Model 158 Stepping 10, GenuineIntel")
-    platform.uname = _mock_uname
 
 warnings.filterwarnings("ignore", category=UserWarning, module="pydantic._internal._fields")
 
 from livekit import agents, rtc
-from livekit.agents import JobContext, WorkerOptions, AgentSession, voice, llm
+from livekit.agents import JobContext, WorkerOptions, AgentSession, voice
 from livekit.plugins import google
 from google.oauth2 import service_account
 from googleapiclient.discovery import build
 
 from prompt import PROMPT
+from tools import CarimAgent
 
-load_dotenv()
+
+base_dir = os.path.dirname(os.path.abspath(__file__))
+load_dotenv(os.path.join(base_dir, ".env"))
 
 class AssistantFunctionContext:
     @llm.function_tool(description="Search the knowledge base for training programs, prices, and details.")
@@ -95,32 +81,26 @@ class AssistantFunctionContext:
 async def entrypoint(ctx: JobContext):
     try:
         print("🔌 Connecting to room...")
-        await ctx.connect()
+        await ctx.connect()  # ✅ FIXED
 
         print("🤖 Initializing Gemini Realtime model...")
-        # FIX: Updated to current 2026 production model: Gemini 3.1 Flash Live
-        model = google.beta.realtime.RealtimeModel(
+        llm = google.beta.realtime.RealtimeModel(
             model="gemini-2.5-flash-native-audio-preview-12-2025",
-            voice="Puck",
-            temperature=0.6,
+            voice="Aoede",
+            temperature=0.8,
         )
-
-        fnc_ctx = AssistantFunctionContext()
 
         print("🧠 Creating agent...")
         agent = voice.Agent(
             instructions=PROMPT,
-            llm=model,
-            min_endpointing_delay=1.0,
-            allow_interruptions=True
+            llm=llm
         )
 
         print("🎙️ Starting session...")
         session = AgentSession(
-            llm=model,
+            llm=llm,
             vad=None,
-            turn_detection="realtime_llm",
-            tools=llm.find_function_tools(fnc_ctx),
+            turn_detection="realtime_llm"
         )
 
         await session.start(agent, room=ctx.room)
@@ -132,15 +112,21 @@ async def entrypoint(ctx: JobContext):
 
     except Exception as e:
         import traceback
-        print("❌ ERROR:", e)
-        traceback.print_exc()
 
+        print(f"CRITICAL SESSION ERROR: {e}")
+        traceback.print_exc()
     finally:
-        print("🔌 Disconnected")
+        print(f"Session ended for room: {ctx.room.name}")
 
 
 if __name__ == "__main__":
-    print("🚀 Starting LiveKit Worker...")
+    print("Starting LiveKit Worker with Gemini Live...")
+    os.environ["LIVEKIT_HTTP_PORT"] = "8085"
     agents.cli.run_app(
-        WorkerOptions(entrypoint_fnc=entrypoint)
+        WorkerOptions(
+            entrypoint_fnc=entrypoint,
+            ws_url=os.environ.get("LIVEKIT_URL"),
+            api_key=os.environ.get("LIVEKIT_API_KEY"),
+            api_secret=os.environ.get("LIVEKIT_API_SECRET"),
+        )
     )

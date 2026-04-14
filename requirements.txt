@@ -5,4 +5,4 @@ livekit-plugins-turn-detector
 python-dotenv
 google-auth
 google-api-python-client
-
+flask

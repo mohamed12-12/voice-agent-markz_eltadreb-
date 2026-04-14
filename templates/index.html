@@ -1,0 +1,268 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>المحكمة العربية للتحكيم - مساعد صوتي</title>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600&family=Cairo:wght@400;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/livekit-client/dist/livekit-client.umd.min.js"></script>
+    <script>
+        if (
+            typeof LiveKit === "undefined" &&
+            typeof LiveKitClient === "undefined" &&
+            typeof livekit === "undefined"
+        ) {
+            const unpkg = document.createElement("script");
+            unpkg.src = "https://unpkg.com/livekit-client/dist/livekit-client.umd.min.js";
+            document.head.appendChild(unpkg);
+        }
+    </script>
+    <style>
+        :root {
+            --primary: #10b981;
+            --bg: #0f172a;
+            --card: #1e293b;
+            --text: #f8fafc;
+            --muted: #94a3b8;
+            --danger: #ef4444;
+        }
+
+        body {
+            font-family: "Cairo", "Outfit", sans-serif;
+            background-color: var(--bg);
+            color: var(--text);
+            margin: 0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            overflow: hidden;
+        }
+
+        .container {
+            background: var(--card);
+            padding: 3rem;
+            border-radius: 24px;
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+            text-align: center;
+            max-width: 450px;
+            width: 90%;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        h1 {
+            font-size: 2rem;
+            margin-bottom: 1rem;
+            background: linear-gradient(to right, #34d399, #10b981);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .subtitle {
+            color: var(--muted);
+            margin-bottom: 2.5rem;
+            line-height: 1.6;
+        }
+
+        .voice-circle {
+            width: 120px;
+            height: 120px;
+            background: var(--primary);
+            border-radius: 50%;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            margin: 0 auto 2rem;
+            font-size: 3rem;
+            color: white;
+            transition: all 0.5s ease;
+            box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.4);
+        }
+
+        .voice-circle.active {
+            animation: pulse 2s infinite;
+        }
+
+        @keyframes pulse {
+            0% { transform: scale(1); box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.7); }
+            70% { transform: scale(1.1); box-shadow: 0 0 0 30px rgba(16, 185, 129, 0); }
+            100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(16, 185, 129, 0); }
+        }
+
+        .status {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            margin-bottom: 2rem;
+            color: var(--muted);
+        }
+
+        .status-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: var(--danger);
+        }
+
+        .status-dot.online {
+            background: var(--primary);
+        }
+
+        .btn {
+            background: white;
+            color: black;
+            border: none;
+            padding: 1rem 2.5rem;
+            border-radius: 12px;
+            font-size: 1.1rem;
+            font-weight: 600;
+            cursor: pointer;
+            width: 100%;
+            transition: all 0.3s ease;
+        }
+
+        .btn:hover {
+            transform: translateY(-2px);
+            opacity: 0.9;
+        }
+
+        .log {
+            margin-top: 1.5rem;
+            font-size: 0.9rem;
+            color: #64748b;
+            min-height: 20px;
+        }
+
+        #remote-audio audio {
+            display: none;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>المحكمة العربية للتحكيم</h1>
+        <p class="subtitle">تحدث مع المساعد الذكي لمعرفة المزيد عن دوراتنا وبرامجنا التدريبية.</p>
+
+        <div class="voice-circle" id="voice-circle">
+            <i class="fas fa-microphone"></i>
+        </div>
+
+        <div class="status">
+            <div class="status-dot" id="status-dot"></div>
+            <span id="status-text">غير متصل</span>
+        </div>
+
+        <button class="btn" id="connect-btn">ابدأ المحادثة</button>
+        <div class="log" id="log"></div>
+    </div>
+    <div id="remote-audio"></div>
+
+    <script>
+        const btn = document.getElementById("connect-btn");
+        const statusText = document.getElementById("status-text");
+        const statusDot = document.getElementById("status-dot");
+        const voiceCircle = document.getElementById("voice-circle");
+        const log = document.getElementById("log");
+        const remoteAudio = document.getElementById("remote-audio");
+
+        let room;
+        let lkClient;
+        let isConnected = false;
+
+        function resetUi(message) {
+            statusText.innerText = "غير متصل";
+            statusDot.classList.remove("online");
+            voiceCircle.classList.remove("active");
+            btn.innerText = "ابدأ المحادثة";
+            btn.style.background = "white";
+            btn.style.color = "black";
+            btn.disabled = false;
+            isConnected = false;
+            log.innerText = message || "";
+        }
+
+        btn.addEventListener("click", async () => {
+            if (isConnected) {
+                await room.disconnect();
+                resetUi("تم إنهاء المكالمة");
+                return;
+            }
+
+            btn.disabled = true;
+            statusText.innerText = "جاري الاتصال...";
+            log.innerText = "جار تجهيز الميكروفون";
+
+            try {
+                const previewStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                previewStream.getTracks().forEach((track) => track.stop());
+
+                const response = await fetch("/getToken");
+                const data = await response.json();
+                if (!response.ok) {
+                    throw new Error(data.error || "Failed to get token");
+                }
+
+                lkClient =
+                    window.LiveKit ||
+                    window.LiveKitClient ||
+                    window.LivekitClient ||
+                    window.livekit;
+
+                if (!lkClient) {
+                    throw new Error("LiveKit SDK not loaded");
+                }
+
+                room = new lkClient.Room({
+                    adaptiveStream: true,
+                    dynacast: true,
+                });
+
+                room.on(lkClient.RoomEvent.TrackSubscribed, (track) => {
+                    const audioKind = lkClient.Track?.Kind?.Audio ?? "audio";
+                    if (track.kind === audioKind && typeof track.attach === "function") {
+                        const element = track.attach();
+                        element.autoplay = true;
+                        element.playsInline = true;
+                        remoteAudio.appendChild(element);
+                    }
+                });
+
+                room.on(lkClient.RoomEvent.TrackUnsubscribed, (track) => {
+                    if (typeof track.detach === "function") {
+                        track.detach().forEach((element) => element.remove());
+                    }
+                });
+
+                room.on(lkClient.RoomEvent.Disconnected, () => {
+                    resetUi("انقطع الاتصال");
+                });
+
+                await room.connect(data.url, data.token);
+
+                if (typeof room.startAudio === "function") {
+                    await room.startAudio();
+                }
+
+                await room.localParticipant.setMicrophoneEnabled(true);
+
+                isConnected = true;
+                statusText.innerText = "متصل - تحدث الآن";
+                statusDot.classList.add("online");
+                voiceCircle.classList.add("active");
+                btn.innerText = "إنهاء المكالمة";
+                btn.style.background = "#ef4444";
+                btn.style.color = "white";
+                btn.disabled = false;
+                log.innerText = "الميكروفون متصل والمساعد جاهز";
+            } catch (error) {
+                console.error(error);
+                statusText.innerText = "خطأ";
+                btn.disabled = false;
+                log.innerText = error.message || String(error);
+            }
+        });
+    </script>
+</body>
+</html>
