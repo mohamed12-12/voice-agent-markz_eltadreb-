@@ -37,8 +37,8 @@ from prompt import PROMPT
 from tools import CarimAgent
 
 
-base_dir = os.path.dirname(os.path.abspath(__file__))
-load_dotenv(os.path.join(base_dir, ".env"))
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+load_dotenv(os.path.join(BASE_DIR, ".env"), override=True)
 
 
 def _get_env_float(name: str, default: float) -> float:
@@ -61,15 +61,27 @@ def _get_env_int(name: str, default: int) -> int:
         return default
 
 
+def _get_env_bool(name: str, default: bool) -> bool:
+    value = os.environ.get(name)
+    if value is None or value == "":
+        return default
+    return value.strip().lower() in {"1", "true", "yes", "on"}
+
+
 async def entrypoint(ctx: JobContext):
     try:
         print(f"--- Connecting to Room: {ctx.room.name} ---")
         await ctx.connect()
 
+        use_vertexai = _get_env_bool("GEMINI_USE_VERTEXAI", False)
+        default_model = (
+            "gemini-live-2.5-flash-native-audio"
+            if use_vertexai
+            else "gemini-2.5-flash-native-audio-preview-12-2025"
+        )
+
         model = google.realtime.RealtimeModel(
-            model=os.environ.get(
-                "GEMINI_MODEL", "gemini-live-2.5-flash-native-audio"
-            ),
+            model=os.environ.get("GEMINI_MODEL", default_model),
             api_key=os.environ.get("GOOGLE_API_KEY"),
             instructions=PROMPT,
             voice=os.environ.get("GEMINI_VOICE", "Orus"),
@@ -78,6 +90,9 @@ async def entrypoint(ctx: JobContext):
             max_output_tokens=_get_env_int("GEMINI_MAX_OUTPUT_TOKENS", 180),
             top_p=_get_env_float("GEMINI_TOP_P", 0.8),
             candidate_count=1,
+            vertexai=use_vertexai,
+            project=os.environ.get("GOOGLE_CLOUD_PROJECT"),
+            location=os.environ.get("GOOGLE_CLOUD_LOCATION"),
         )
 
         agent = CarimAgent(instructions=PROMPT)
@@ -97,8 +112,11 @@ async def entrypoint(ctx: JobContext):
             agent=agent,
             room=ctx.room,
             room_input_options=RoomInputOptions(
+                audio_enabled=True,
+                participant_identity="Client-Guest",
                 close_on_disconnect=False,
                 pre_connect_audio=True,
+                pre_connect_audio_timeout=10.0,
             ),
         )
 
@@ -121,6 +139,7 @@ if __name__ == "__main__":
     agents.cli.run_app(
         WorkerOptions(
             entrypoint_fnc=entrypoint,
+            agent_name=os.environ.get("AGENT_NAME", "carim-agent"),
             ws_url=os.environ.get("LIVEKIT_URL"),
             api_key=os.environ.get("LIVEKIT_API_KEY"),
             api_secret=os.environ.get("LIVEKIT_API_SECRET"),

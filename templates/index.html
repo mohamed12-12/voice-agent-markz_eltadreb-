@@ -169,6 +169,7 @@
 
         let room;
         let lkClient;
+        let localAudioTrack;
         let isConnected = false;
 
         function resetUi(message) {
@@ -186,6 +187,10 @@
         btn.addEventListener("click", async () => {
             if (isConnected) {
                 await room.disconnect();
+                if (localAudioTrack && typeof localAudioTrack.stop === "function") {
+                    localAudioTrack.stop();
+                    localAudioTrack = null;
+                }
                 resetUi("تم إنهاء المكالمة");
                 return;
             }
@@ -195,10 +200,20 @@
             log.innerText = "جار تجهيز الميكروفون";
 
             try {
-                const previewStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                const previewStream = await navigator.mediaDevices.getUserMedia({
+                    audio: {
+                        echoCancellation: true,
+                        noiseSuppression: true,
+                        autoGainControl: true,
+                    },
+                });
                 previewStream.getTracks().forEach((track) => track.stop());
 
-                const response = await fetch("/getToken");
+                const roomName = "demo-room";
+                const participantName = "Client-Guest";
+                const response = await fetch(
+                    `/getToken?roomName=${encodeURIComponent(roomName)}&participantName=${encodeURIComponent(participantName)}`
+                );
                 const data = await response.json();
                 if (!response.ok) {
                     throw new Error(data.error || "Failed to get token");
@@ -236,6 +251,10 @@
                 });
 
                 room.on(lkClient.RoomEvent.Disconnected, () => {
+                    if (localAudioTrack && typeof localAudioTrack.stop === "function") {
+                        localAudioTrack.stop();
+                        localAudioTrack = null;
+                    }
                     resetUi("انقطع الاتصال");
                 });
 
@@ -245,7 +264,16 @@
                     await room.startAudio();
                 }
 
-                await room.localParticipant.setMicrophoneEnabled(true);
+                if (typeof lkClient.createLocalAudioTrack === "function") {
+                    localAudioTrack = await lkClient.createLocalAudioTrack({
+                        echoCancellation: true,
+                        noiseSuppression: true,
+                        autoGainControl: true,
+                    });
+                    await room.localParticipant.publishTrack(localAudioTrack);
+                } else {
+                    await room.localParticipant.setMicrophoneEnabled(true);
+                }
 
                 isConnected = true;
                 statusText.innerText = "متصل - تحدث الآن";
