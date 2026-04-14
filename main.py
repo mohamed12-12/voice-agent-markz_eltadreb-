@@ -1,14 +1,37 @@
 import asyncio
+import os
+import platform
 import warnings
+
 from dotenv import load_dotenv
 
-warnings.filterwarnings("ignore", category=UserWarning, module="pydantic._internal._fields")
+# Avoid the Windows WMI timeout path that can slow or break startup on some machines.
+if platform.system() == "Windows":
+    from collections import namedtuple
+
+    def _mock_uname():
+        uname_result = namedtuple(
+            "uname_result", "system node release version machine processor"
+        )
+        node_name = os.environ.get("COMPUTERNAME", "Windows-Host")
+        return uname_result(
+            "Windows",
+            node_name,
+            "10",
+            "10.0.0",
+            "AMD64",
+            "Intel64 Family 6 Model 158 Stepping 10, GenuineIntel",
+        )
+
+    platform.uname = _mock_uname
+
+warnings.filterwarnings(
+    "ignore", category=UserWarning, module="pydantic._internal._fields"
+)
 
 from livekit import agents, rtc
-from livekit.agents import JobContext, WorkerOptions, AgentSession, voice
+from livekit.agents import AgentSession, JobContext, RoomInputOptions, WorkerOptions
 from livekit.plugins import google
-from google.oauth2 import service_account
-from googleapiclient.discovery import build
 
 from prompt import PROMPT
 from tools import CarimAgent
@@ -17,96 +40,69 @@ from tools import CarimAgent
 base_dir = os.path.dirname(os.path.abspath(__file__))
 load_dotenv(os.path.join(base_dir, ".env"))
 
-class AssistantFunctionContext:
-    @llm.function_tool(description="Search the knowledge base for training programs, prices, and details.")
-    async def knowledge_lookup(self, query: str) -> str:
-        """Searches the KNOWLEDGE_BASE.md file and returns the content."""
-        print(f"🔍 Searching knowledge for: {query}")
-        try:
-            # We ignore the query and return the whole file as it is a small KB
-            # This ensures the agent has full context.
-            with open("KNOWLEDGE_BASE.md", "r", encoding="utf-8") as f:
-                return f.read()
-        except Exception as e:
-            return f"Knowledge error: {str(e)}"
 
-    @llm.function_tool(description="Save lead name, phone, and interest to Google Sheets.")
-    async def save_lead_to_sheets(self, 
-                                  name: str, 
-                                  phone: str, 
-                                  interest: str) -> str:
-        """Appends one row with lead details to the configured Google Sheet."""
-        print(f"📝 Saving lead: {name}, {phone}, {interest}")
-        try:
-            spreadsheet_id = os.getenv("SPREADSHEET_ID")
-            if not spreadsheet_id:
-                return "error: SPREADSHEET_ID not set in environment"
-                
-            scopes = ["https://www.googleapis.com/auth/spreadsheets"]
-            creds = service_account.Credentials.from_service_account_file(
-                "service_account.json", scopes=scopes
-            )
-            service = build("sheets", "v4", credentials=creds)
-            sheet_name = os.getenv("SHEET_NAME", "Leads")
-            
-            timestamp = datetime.datetime.now().strftime("%d/%m/%Y %H:%M")
-            summary = (
-                f"Student: {name}\n"
-                f"Interest: {interest}\n"
-                f"Captured: {timestamp}\n"
-                f"NEW_LEAD"
-            )
-            
-            values = [[name, phone, summary, "NEW_LEAD"]]
-            service.spreadsheets().values().append(
-                spreadsheetId=spreadsheet_id,
-                range=f"{sheet_name}!A:D",
-                valueInputOption="USER_ENTERED",
-                insertDataOption="INSERT_ROWS",
-                body={"values": values}
-            ).execute()
-            return "saved"
-        except Exception as e:
-            print(f"❌ Sheets Error: {e}")
-            return f"error: {str(e)}"
+def _get_env_float(name: str, default: float) -> float:
+    value = os.environ.get(name)
+    if value is None or value == "":
+        return default
+    try:
+        return float(value)
+    except ValueError:
+        return default
 
-    @llm.function_tool(description="Transfer the call to a human manager or specific department.")
-    async def human_transfer(self, reason: str) -> str:
-        """Simulates a call transfer to a human agent."""
-        print(f"📞 Transferring to human. Reason: {reason}")
-        # In a real LiveKit setup, you might use SIP or a specific signal.
-        # Here we just acknowledge the transfer.
-        return "Transferring you to a human manager now. Please stay on the line."
+
+def _get_env_int(name: str, default: int) -> int:
+    value = os.environ.get(name)
+    if value is None or value == "":
+        return default
+    try:
+        return int(value)
+    except ValueError:
+        return default
+
 
 async def entrypoint(ctx: JobContext):
     try:
-        print("🔌 Connecting to room...")
-        await ctx.connect()  # ✅ FIXED
+        print(f"--- Connecting to Room: {ctx.room.name} ---")
+        await ctx.connect()
 
-        print("🤖 Initializing Gemini Realtime model...")
-        llm = google.beta.realtime.RealtimeModel(
-            model="gemini-2.5-flash-native-audio-preview-12-2025",
-            voice="Aoede",
-            temperature=0.8,
-        )
-
-        print("🧠 Creating agent...")
-        agent = voice.Agent(
+        model = google.realtime.RealtimeModel(
+            model=os.environ.get(
+                "GEMINI_MODEL", "gemini-live-2.5-flash-native-audio"
+            ),
+            api_key=os.environ.get("GOOGLE_API_KEY"),
             instructions=PROMPT,
-            llm=llm
+            voice=os.environ.get("GEMINI_VOICE", "Orus"),
+            language=os.environ.get("GEMINI_LANGUAGE", "ar-EG"),
+            temperature=_get_env_float("GEMINI_TEMPERATURE", 0.45),
+            max_output_tokens=_get_env_int("GEMINI_MAX_OUTPUT_TOKENS", 180),
+            top_p=_get_env_float("GEMINI_TOP_P", 0.8),
+            candidate_count=1,
         )
 
-        print("🎙️ Starting session...")
+        agent = CarimAgent(instructions=PROMPT)
         session = AgentSession(
-            llm=llm,
-            vad=None,
-            turn_detection="realtime_llm"
+            llm=model,
+            min_endpointing_delay=_get_env_float("MIN_ENDPOINTING_DELAY", 0.2),
+            max_endpointing_delay=_get_env_float("MAX_ENDPOINTING_DELAY", 0.9),
+            allow_interruptions=True,
+            min_interruption_duration=_get_env_float("MIN_INTERRUPTION_DURATION", 0.25),
+            resume_false_interruption=True,
+            user_away_timeout=_get_env_float("USER_AWAY_TIMEOUT", 8.0),
+            aec_warmup_duration=_get_env_float("AEC_WARMUP_DURATION", 1.0),
         )
 
-        await session.start(agent, room=ctx.room)
+        print("Starting AgentSession...")
+        await session.start(
+            agent=agent,
+            room=ctx.room,
+            room_input_options=RoomInputOptions(
+                close_on_disconnect=False,
+                pre_connect_audio=True,
+            ),
+        )
 
-        print("✅ Agent running...")
-
+        print("Agent is live. Waiting for user input...")
         while ctx.room.connection_state == rtc.ConnectionState.CONN_CONNECTED:
             await asyncio.sleep(1)
 
