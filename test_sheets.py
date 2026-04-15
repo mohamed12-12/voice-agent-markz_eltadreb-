@@ -12,6 +12,8 @@ os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = os.path.join(SCRIPT_DIR, "service
 # ---- Direct test of the Google Sheets write logic ----
 import re
 from datetime import datetime, timezone
+import httplib2
+from google_auth_httplib2 import AuthorizedHttp
 from googleapiclient.discovery import build
 from google.oauth2 import service_account
 
@@ -31,7 +33,11 @@ def test_save_to_sheets():
             creds_file,
             scopes=["https://www.googleapis.com/auth/spreadsheets"]
         )
-        service = build("sheets", "v4", credentials=creds)
+        http = AuthorizedHttp(
+            creds,
+            http=httplib2.Http(timeout=30, proxy_info=None),
+        )
+        service = build("sheets", "v4", http=http, cache_discovery=False)
         
         spreadsheet_id = os.environ.get("SPREADSHEET_ID")
         sheet_name = os.environ.get("SHEET_NAME", "agentdata")

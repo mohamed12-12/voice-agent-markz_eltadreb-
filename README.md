@@ -77,6 +77,11 @@ The page will request a token from the Flask server, connect to your LiveKit roo
 - If you see a Gemini policy/model mismatch, set `GEMINI_MODEL=gemini-2.5-flash-native-audio-preview-12-2025`
 - If Sheets writes fail, confirm the sheet is shared with the service account email
 - If the browser connects but no voice is heard, make sure the worker is running and the room name matches
+- If the agent cuts the user off too early or stops mid-reply, start with the safer defaults in `.env`:
+  `GEMINI_VAD_SILENCE_MS=2600`, `MIN_ENDPOINTING_DELAY=1.6`, `MAX_ENDPOINTING_DELAY=3.4`,
+  `ALLOW_INTERRUPTIONS=true`, `MIN_INTERRUPTION_DURATION=1.2`, `MIN_INTERRUPTION_WORDS=1`,
+  `FALSE_INTERRUPTION_TIMEOUT=3.2`, `AEC_WARMUP_DURATION=1.5`, `GEMINI_START_OF_SPEECH_SENSITIVITY=high`,
+  and `GEMINI_MAX_OUTPUT_TOKENS=520`
 
 ## Notes
 

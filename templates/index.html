@@ -1,10 +1,12 @@
 <!DOCTYPE html>
 <html lang="ar" dir="rtl">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>المحكمة العربية للتحكيم - مساعد صوتي</title>
-    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600&family=Cairo:wght@400;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600&family=Cairo:wght@400;700&display=swap"
+        rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
     <script src="https://cdn.jsdelivr.net/npm/livekit-client/dist/livekit-client.umd.min.js"></script>
     <script>
@@ -56,6 +58,7 @@
             margin-bottom: 1rem;
             background: linear-gradient(to right, #34d399, #10b981);
             -webkit-background-clip: text;
+            background-clip: text;
             -webkit-text-fill-color: transparent;
         }
 
@@ -85,9 +88,20 @@
         }
 
         @keyframes pulse {
-            0% { transform: scale(1); box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.7); }
-            70% { transform: scale(1.1); box-shadow: 0 0 0 30px rgba(16, 185, 129, 0); }
-            100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(16, 185, 129, 0); }
+            0% {
+                transform: scale(1);
+                box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.7);
+            }
+
+            70% {
+                transform: scale(1.1);
+                box-shadow: 0 0 0 30px rgba(16, 185, 129, 0);
+            }
+
+            100% {
+                transform: scale(1);
+                box-shadow: 0 0 0 0 rgba(16, 185, 129, 0);
+            }
         }
 
         .status {
@@ -140,6 +154,7 @@
         }
     </style>
 </head>
+
 <body>
     <div class="container">
         <h1>المحكمة العربية للتحكيم</h1>
@@ -293,4 +308,5 @@
         });
     </script>
 </body>
+
 </html>
